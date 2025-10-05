@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Book Collection</title>
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #f4f7fc, #dde7f3);
+      color: #333;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+      color: #2c3e50;
+    }
+    .genre {
+      margin-bottom: 40px;
+    }
+    .genre h2 {
+      color: #1a5276;
+      border-bottom: 2px solid #5dade2;
+      padding-bottom: 5px;
+    }
+    .book {
+      display: flex;
+      align-items: center;
+      margin: 15px 0;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      padding: 10px;
+      transition: transform 0.2s ease;
+    }
+    .book:hover {
+      transform: scale(1.02);
+    }
+    .book img {
+      width: 120px;
+      height: auto;
+      border-radius: 8px;
+      margin-right: 20px;
+    }
+    .book a {
+      text-decoration: none;
+      color: #2c3e50;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>My Book Collection</h1>
+
+  <div class="genre">
+    <h2>Fantasy</h2>
+    <div class="book">
+      <img src="fantasy/dance_with_dragons_cover.png" alt="Dance with Dragons Cover">
+      <a href="fantasy/dance_with_dragons.pdf" target="_blank">Dance with Dragons (PDF)</a>
+    </div>
+  </div>
+
+  <div class="genre">
+    <h2>Romance</h2>
+    <div class="book">
+      <img src="romance/wuthering_heights_cover.png" alt="Wuthering Heights Cover">
+      <a href="romance/wuthering_heights.pdf" target="_blank">Wuthering Heights (PDF)</a>
+    </div>
+  </div>
+
+  <div class="genre">
+    <h2>Science Fiction</h2>
+    <div class="book">
+      <img src="science_fiction/1984_cover.png" alt="1984 Cover">
+      <a href="science_fiction/1984.pdf" target="_blank">1984 (PDF)</a>
+    </div>
+  </div>
+
+</body>
+</html>

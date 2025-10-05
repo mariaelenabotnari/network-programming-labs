@@ -1,10 +1,11 @@
+import sys
+
+import argparse
 import os.path
 from http.server import BaseHTTPRequestHandler, HTTPServer
-import time
 
 hostname = "localhost"
 port = 8080
-directory = "book_covers"
 
 class Server(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -54,7 +55,7 @@ class Server(BaseHTTPRequestHandler):
             entry_path = os.path.join(current_directory, entry)
             url_path = os.path.join(subpath, entry).replace("\\", "/")
             if os.path.isdir(entry_path):
-                html += f'<p>📁 <a href="/browse/{url_path}" target="_blank">{entry}</a></p>'
+                html += f'<p>📁 <a href="/browse/{url_path}">{entry}</a></p>'
             else:
                 html += f'<p>📄 <a href="/view/{url_path}" target="_blank">{entry}</a></p>'
 
@@ -88,6 +89,11 @@ class Server(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='A simple HTTP file server.')
+    parser.add_argument('directory', type=str, help='The directory to serve files from.')
+    args = parser.parse_args()
+    directory = args.directory
+
     web_server = HTTPServer((hostname, port), Server)
     print("Server started http://%s:%s" % (hostname, port))
 

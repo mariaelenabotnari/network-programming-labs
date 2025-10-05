@@ -1,7 +1,6 @@
 import argparse
 import os
 import sys
-import urllib
 
 import requests
 
@@ -53,7 +52,7 @@ def main():
 
     args = parser.parse_args()
 
-    url = f"http://{args.server_host}:{args.server_port}/{args.filename}"
+    url = f"http://{args.server_host}:{args.server_port}/view/{args.filename}"
 
     print(f"Downloading: {url}")
     print(f"Saving to directory: {args.save_directory}")
