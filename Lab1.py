@@ -4,7 +4,7 @@ import argparse
 import os.path
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-hostname = "localhost"
+hostname = "0.0.0.0"
 port = 8080
 
 class Server(BaseHTTPRequestHandler):

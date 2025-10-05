@@ -1,0 +1,9 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+COPY requirements.client.txt .
+RUN pip install -r requirements.client.txt
+
+COPY client.py .
+

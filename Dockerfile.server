@@ -1,0 +1,8 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+COPY Lab1.py .
+ENV SERVE_DIR=/data
+
+CMD ["sh", "-c", "python -u Lab1.py $SERVE_DIR"]

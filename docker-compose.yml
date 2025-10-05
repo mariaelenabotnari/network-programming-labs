@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: file_server
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./books:/data:ro
+    environment:
+      - SERVE_DIR=/data
+
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    volumes:
+      - ./downloads:/downloads
+    depends_on:
+      - server
+    entrypoint: [ "python", "client.py" ]
+    command: [ "server", "8080", "${DOWNLOAD_FILE}", "/downloads" ]
