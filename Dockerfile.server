@@ -2,7 +2,7 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
-COPY Lab1.py .
+COPY Server.py .
 ENV SERVE_DIR=/data
 
-CMD ["sh", "-c", "python -u Lab1.py $SERVE_DIR"]
+CMD ["sh", "-c", "python -u Server.py $SERVE_DIR"]
