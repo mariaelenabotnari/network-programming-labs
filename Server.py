@@ -59,7 +59,7 @@ def serve_file(directory, file_path):
 def handle_request(directory, request):
     try:
         request_line = request.split("\r\n")[0]
-        http_method, path, _ = request_line.split(" ")
+        method, path, _ = request_line.split(" ")
 
         requested_path = path.lstrip("/")
 
@@ -90,7 +90,7 @@ def start_server(directory):
 
         print(f"Server started at http://{hostname}:{port}")
         while True:
-            client_connection_socket, client_address = server_socket.accept()
+            client_connection_socket, client_addr = server_socket.accept()
             with client_connection_socket:
                 request = client_connection_socket.recv(4096).decode("utf-8", errors="ignore")
                 if not request:
