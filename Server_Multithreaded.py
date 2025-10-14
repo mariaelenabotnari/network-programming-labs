@@ -1,11 +1,17 @@
+import signal
 import socket
+import threading
 import time
 
 import argparse
 import os.path
 
 hostname = "0.0.0.0"
-port = 8081
+port = 8080
+
+client_threads = []
+shutdown_event = threading.Event()
+
 
 def build_response(status_code, content_type, body):
     return (
@@ -14,6 +20,7 @@ def build_response(status_code, content_type, body):
         f"Content-Length: {len(body)}\r\n"
         f"Connection: close\r\n\r\n"
     ).encode() + body
+
 
 def list_files(directory, subpath=""):
     current_directory = os.path.join(directory, subpath)
@@ -39,6 +46,7 @@ def list_files(directory, subpath=""):
 
     return build_response("200 OK", "text/html", html.encode())
 
+
 def serve_file(directory, file_path):
     requested_path = os.path.join(directory, file_path)
     if not os.path.exists(requested_path):
@@ -57,6 +65,7 @@ def serve_file(directory, file_path):
         body = f.read()
 
     return build_response("200 OK", mime, body)
+
 
 def handle_request(directory, request):
     try:
@@ -85,21 +94,58 @@ def handle_request(directory, request):
     except Exception as e:
         return build_response("500 Internal Server Error", "text/html", f"<h1>Error: {e}</h1>".encode())
 
+
+def handle_client(client_connection_socket, client_address, directory):
+    with client_connection_socket:
+        try:
+            request = client_connection_socket.recv(4096).decode("utf-8", errors="ignore")
+            if not request:
+                return
+            response = handle_request(directory, request)
+            client_connection_socket.sendall(response)
+        except Exception as e:
+            print(f"Error handling client {client_address}: {e}")
+    print(f"Connection with {client_address} closed.")
+
+
 def start_server(directory):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server_socket.bind((hostname, port))
-        server_socket.listen(15)
+        server_socket.listen(5)
 
         print(f"Server started at http://{hostname}:{port}")
-        while True:
-            client_connection_socket, client_addr = server_socket.accept()
-            with client_connection_socket:
-                request = client_connection_socket.recv(4096).decode("utf-8", errors="ignore")
-                if not request:
-                    continue
-                response = handle_request(directory, request)
-                client_connection_socket.sendall(response)
+
+        while not shutdown_event.isSet():
+            try:
+                server_socket.settimeout(1.0)
+                client_connection_socket, client_address = server_socket.accept()
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+
+            print(f"New connection from {client_address}")
+
+            client_thread = threading.Thread(target=handle_client,
+                                             args=(client_connection_socket, client_address, directory),
+                                             daemon=True)
+            client_thread.start()
+            client_threads.append(client_thread)
+
+        print("Server is shutting down, waiting for threads to finish...")
+
+        for t in client_threads:
+            t.join()
+
+        print("All client threads finished. Server closed.")
+
+
+def handle_shutdown():
+    shutdown_event.set()
+
+
+signal.signal(signal.SIGINT, handle_shutdown)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='A simple socket-based HTTP file server.')
