@@ -12,6 +12,9 @@ port = 8080
 client_threads = []
 shutdown_event = threading.Event()
 
+requests_count_dict = {}
+count_lock = threading.Lock()
+
 
 def build_response(status_code, content_type, body):
     return (
@@ -22,6 +25,15 @@ def build_response(status_code, content_type, body):
     ).encode() + body
 
 
+def update_count(path):
+    with count_lock:
+        current_count = requests_count_dict.get(path, 0)
+        print(f"[Thread {threading.current_thread().name}] Read count for {path}: {current_count}")
+        time.sleep(0.01)
+        requests_count_dict[path] = current_count + 1
+        print(f"[Thread {threading.current_thread().name}] Updated count for {path} to {current_count + 1}")
+
+
 def list_files(directory, subpath=""):
     current_directory = os.path.join(directory, subpath)
     if not os.path.exists(current_directory):
@@ -30,18 +42,25 @@ def list_files(directory, subpath=""):
     entries = os.listdir(current_directory)
     html = f"<html><body><h1>Files in /{subpath or directory}</h1>"
 
+    update_count(subpath)
+
     if subpath:
         parent_path = os.path.dirname(subpath.rstrip("/"))
         html += f'<p><a href="/browse/{parent_path}">⬅ Back</a></p>'
 
+    html += '<table border="1" cellpadding="5">'
+    html += '<tr><th>File/Directory</th><th>Hits</th></tr>'
+
     for entry in entries:
         entry_path = os.path.join(current_directory, entry)
         url_path = os.path.join(subpath, entry).replace("\\", "/")
-        if os.path.isdir(entry_path):
-            html += f'<p>📁 <a href="/browse/{url_path}">{entry}</a></p>'
-        else:
-            html += f'<p>📄 <a href="/view/{url_path}" target="_blank">{entry}</a></p>'
 
+        if os.path.isdir(entry_path):
+            html += f'<tr><td>📁 <a href="/browse/{url_path}">{entry}</a></td><td>{requests_count_dict.get(url_path)}</td></tr>'
+        else:
+            html += f'<tr><td>📄 <a href="/view/{url_path}" target="_blank">{entry}</a></td><td>{requests_count_dict.get(url_path)}</td></tr>'
+
+    html += '</table>'
     html += "</body> </html>"
 
     return build_response("200 OK", "text/html", html.encode())
@@ -51,6 +70,8 @@ def serve_file(directory, file_path):
     requested_path = os.path.join(directory, file_path)
     if not os.path.exists(requested_path):
         return build_response("404 Not Found", "text/html", b"<h1>File Not Found</h1>")
+
+    update_count(file_path)
 
     if requested_path.endswith(".png"):
         mime = "image/png"

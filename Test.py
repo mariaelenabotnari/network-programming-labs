@@ -8,7 +8,7 @@ import time
 def create_connection(hostname, port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
         client_socket.connect((hostname, port))
-        request = f"GET / HTTP/1.1\r\nHost: {hostname}\r\nConnection: close\r\n\r\n"
+        request = f"GET /science_fiction HTTP/1.1\r\nHost: {hostname}\r\nConnection: close\r\n\r\n"
         client_socket.sendall(request.encode())
         client_socket.recv(4096)
 
