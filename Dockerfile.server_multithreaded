@@ -1,0 +1,9 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+COPY Server_Multithreaded.py .
+
+ENV SERVE_DIR=/data
+
+CMD ["sh", "-c", "python -u Server_Multithreaded.py $SERVE_DIR"]

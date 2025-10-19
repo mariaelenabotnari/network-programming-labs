@@ -15,6 +15,9 @@ shutdown_event = threading.Event()
 requests_count_dict = {}
 count_lock = threading.Lock()
 
+requests_timestamps_dict = {}
+rate_limit_lock = threading.Lock()
+
 
 def build_response(status_code, content_type, body):
     return (
@@ -34,15 +37,34 @@ def update_count(path):
         print(f"[Thread {threading.current_thread().name}] Updated count for {path} to {current_count + 1}")
 
 
+def is_rate_limited(client_ip):
+    with rate_limit_lock:
+        current_time = time.time()
+        timestamps = requests_timestamps_dict.get(client_ip, [])
+
+        relevant_timestamps = [timestamp for timestamp in timestamps if current_time - timestamp < 1]
+
+        if len(relevant_timestamps) >= 5:
+            requests_timestamps_dict[client_ip] = relevant_timestamps
+            print(f"Denying request from {client_ip}. Requests in the last second: {len(relevant_timestamps)}")
+
+            return True
+
+        relevant_timestamps.append(current_time)
+        requests_timestamps_dict[client_ip] = relevant_timestamps
+
+        return False
+
+
 def list_files(directory, subpath=""):
     current_directory = os.path.join(directory, subpath)
     if not os.path.exists(current_directory):
         return build_response("404 Not Found", "text/html", b"<h1>Directory not Found</h1>")
 
+    update_count(subpath)
+
     entries = os.listdir(current_directory)
     html = f"<html><body><h1>Files in /{subpath or directory}</h1>"
-
-    update_count(subpath)
 
     if subpath:
         parent_path = os.path.dirname(subpath.rstrip("/"))
@@ -51,14 +73,27 @@ def list_files(directory, subpath=""):
     html += '<table border="1" cellpadding="5">'
     html += '<tr><th>File/Directory</th><th>Hits</th></tr>'
 
+    paths = []
+    for entry in entries:
+        path = os.path.join(subpath, entry).replace("\\", "/")
+        paths.append(path)
+
+    counts_snapshot = {}
+    with count_lock:
+        for path in paths:
+            count = requests_count_dict.get(path, 0)
+            counts_snapshot[path] = count
+
     for entry in entries:
         entry_path = os.path.join(current_directory, entry)
         url_path = os.path.join(subpath, entry).replace("\\", "/")
 
+        hits = counts_snapshot.get(url_path, 0)
+
         if os.path.isdir(entry_path):
-            html += f'<tr><td>📁 <a href="/browse/{url_path}">{entry}</a></td><td>{requests_count_dict.get(url_path)}</td></tr>'
+            html += f'<tr><td>📁 <a href="/browse/{url_path}">{entry}</a></td><td>{hits}</td></tr>'
         else:
-            html += f'<tr><td>📄 <a href="/view/{url_path}" target="_blank">{entry}</a></td><td>{requests_count_dict.get(url_path)}</td></tr>'
+            html += f'<tr><td>📄 <a href="/view/{url_path}" target="_blank">{entry}</a></td><td>{hits}</td></tr>'
 
     html += '</table>'
     html += "</body> </html>"
@@ -90,11 +125,10 @@ def serve_file(directory, file_path):
 
 def handle_request(directory, request):
     try:
-        time.sleep(1)
         request_line = request.split("\r\n")[0]
         method, path, _ = request_line.split(" ")
 
-        requested_path = path.lstrip("/")
+        time.sleep(1)
 
         if path == "/" or path.startswith("/browse"):
             subpath = path[len("/browse/"):].rstrip("/") if path.startswith("/browse/") else ""
@@ -104,6 +138,7 @@ def handle_request(directory, request):
             subpath = path[len("/view/"):]
             return serve_file(directory, subpath)
 
+        requested_path = path.lstrip("/")
         absolute_path = os.path.join(directory, requested_path)
         if os.path.isdir(absolute_path):
             return list_files(directory, requested_path)
@@ -119,14 +154,21 @@ def handle_request(directory, request):
 def handle_client(client_connection_socket, client_address, directory):
     with client_connection_socket:
         try:
+            client_ip = client_address[0]
+
+            if is_rate_limited(client_ip):
+                response = build_response(429, "text/html", b"<h1>429 Too Many Requests</h1>")
+                client_connection_socket.sendall(response)
+                return
+
             request = client_connection_socket.recv(4096).decode("utf-8", errors="ignore")
             if not request:
                 return
+
             response = handle_request(directory, request)
             client_connection_socket.sendall(response)
         except Exception as e:
             print(f"Error handling client {client_address}: {e}")
-    print(f"Connection with {client_address} closed.")
 
 
 def start_server(directory):
@@ -134,43 +176,37 @@ def start_server(directory):
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server_socket.bind((hostname, port))
         server_socket.listen(5)
+        server_socket.settimeout(1.0)
 
         print(f"Server started at http://{hostname}:{port}")
 
         while not shutdown_event.isSet():
             try:
-                server_socket.settimeout(1.0)
                 client_connection_socket, client_address = server_socket.accept()
+                print(f"New connection from {client_address}")
+                client_thread = threading.Thread(
+                    target=handle_client,
+                    args=(client_connection_socket, client_address, directory)
+                )
+                client_thread.daemon = True
+                client_thread.start()
+                client_threads.append(client_thread)
             except socket.timeout:
                 continue
             except OSError:
                 break
 
-            print(f"New connection from {client_address}")
-
-            client_thread = threading.Thread(target=handle_client,
-                                             args=(client_connection_socket, client_address, directory),
-                                             daemon=True)
-            client_thread.start()
-            client_threads.append(client_thread)
-
-        print("Server is shutting down, waiting for threads to finish...")
-
-        for t in client_threads:
-            t.join()
-
-        print("All client threads finished. Server closed.")
+        print("Server closed.")
 
 
-def handle_shutdown():
+def shutdown_handler(signum, frame):
     shutdown_event.set()
-
-
-signal.signal(signal.SIGINT, handle_shutdown)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='A simple socket-based HTTP file server.')
     parser.add_argument('directory', type=str, help='The directory to serve files from.')
     args = parser.parse_args()
-    directory = args.directory
-    start_server(directory)
+
+    signal.signal(signal.SIGINT, shutdown_handler)
+
+    start_server(args.directory)

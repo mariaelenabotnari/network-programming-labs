@@ -1,25 +1,26 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  server:
+  single_threaded_server:
     build:
       context: .
       dockerfile: Dockerfile.server
-    container_name: file_server
+    container_name: file_server_single
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./books:/data:ro
+    environment:
+      - SERVE_DIR=/data
+
+  multithreaded_server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server_multithreaded
+    container_name: file_server_multi
     ports:
       - "8080:8080"
     volumes:
       - ./books:/data:ro
     environment:
       - SERVE_DIR=/data
-
-  client:
-    build:
-      context: .
-      dockerfile: Dockerfile.client
-    volumes:
-      - ./downloads:/downloads
-    depends_on:
-      - server
-    entrypoint: [ "python", "client.py" ]
-    command: [ "server", "8080", "${DOWNLOAD_FILE}", "/downloads" ]
