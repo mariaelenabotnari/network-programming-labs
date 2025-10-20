@@ -44,7 +44,7 @@ def is_rate_limited(client_ip):
 
         relevant_timestamps = [timestamp for timestamp in timestamps if current_time - timestamp < 1]
 
-        if len(relevant_timestamps) >= 5:
+        if len(relevant_timestamps) > 5:
             requests_timestamps_dict[client_ip] = relevant_timestamps
             print(f"Denying request from {client_ip}. Requests in the last second: {len(relevant_timestamps)}")
 
