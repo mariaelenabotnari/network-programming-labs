@@ -46,7 +46,7 @@ def send_requests(hostname, port):
         thread = threading.Thread(target=create_connection, args=(hostname, port))
         thread.start()
         threads.append(thread)
-        time.sleep(0.2)
+        time.sleep(0.25)
 
     for thread in threads:
         thread.join()

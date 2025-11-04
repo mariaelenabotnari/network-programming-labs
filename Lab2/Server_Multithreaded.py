@@ -199,7 +199,7 @@ def start_server(directory):
         print("Server closed.")
 
 
-def shutdown_handler(signum, frame):
+def shutdown_handler():
     shutdown_event.set()
 
 if __name__ == "__main__":
