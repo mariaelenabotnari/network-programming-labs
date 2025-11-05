@@ -30,6 +30,19 @@ class Board:
         self.nr_cols = 0
         self.nr_rows = 0
         self.cards = []
+        self.watchers: list[asyncio.Future] = []
+
+    def notify_watchers(self):
+        for watcher in self.watchers:
+            if not watcher.done():
+                watcher.set_result(True)
+        self.watchers.clear()
+
+    async def wait_for_change(self):
+        loop = asyncio.get_event_loop()
+        future = loop.create_future()
+        self.watchers.append(future)
+        await future
 
     def get_card(self, row: int, col: int):
         return self.cards[row][col]
