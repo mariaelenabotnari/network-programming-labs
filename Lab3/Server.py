@@ -1,22 +1,24 @@
+import os
 import sys
 import asyncio
-import time
-
-from flask import Flask, Response, send_from_directory
+from quart import Quart, Response, send_from_directory
 from http import HTTPStatus
 
 from Lab3.Board import Board
-from Lab3.Commands import flip, look, map_card_value, watch, check_matching_cards
+from Lab3.Commands import flip, look, map_card_value, watch
 
 
 class WebServer:
     def __init__(self, board: Board, port: int):
         self.board = board
         self.port = port
-        self.app = Flask(__name__, static_folder="public", static_url_path="")
+
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        PUBLIC_DIR = os.path.join(BASE_DIR, "public")
+        self.app = Quart(__name__, static_folder="public", static_url_path="")
 
         @self.app.after_request
-        def add_cors_headers(response):
+        async def add_cors_headers(response):  # <-- Make this async
             response.headers["Access-Control-Allow-Origin"] = "*"
             return response
 
@@ -29,17 +31,13 @@ class WebServer:
         async def flip_route(player_id, location):
             try:
                 row, column = map(int, location.split(","))
-
-                check_existence_matching_cards = await flip(player_id, row, column, self.board)
-
-                if check_existence_matching_cards:
-                    asyncio.create_task(check_matching_cards(player_id, self.board))
-
+                play_message = await flip(player_id, row, column, self.board)
                 board_state = await look(self.board, player_id)
+                print(f"[{player_id}] Move result: {play_message}")
                 return Response(board_state, status=HTTPStatus.OK, mimetype="text/plain")
             except Exception as e:
                 return Response(
-                    f"cannot flip this card: {e}",
+                    f"Move failed: {e}",
                     status=HTTPStatus.CONFLICT,
                     mimetype="text/plain",
                 )
@@ -62,12 +60,8 @@ class WebServer:
             return Response(board_state, status=HTTPStatus.OK, mimetype="text/plain")
 
         @self.app.route("/")
-        def serve_index():
-            return send_from_directory("public", "index.html")
-
-    def start(self):
-        print(f"✅ Server listening at http://localhost:{self.port}")
-        self.app.run(host="0.0.0.0", port=self.port, debug=False)
+        async def serve_index():
+            return await send_from_directory(PUBLIC_DIR, "index.html")
 
 
 def main():
@@ -78,21 +72,24 @@ def main():
     port = int(sys.argv[1])
     filename = sys.argv[2]
 
-    board = asyncio.run(Board.parse_from_file(filename))
+    async def run_server():
+        board = await Board.parse_from_file(filename)
 
-    server = WebServer(board, port)
+        server = WebServer(board, port)
 
-    from hypercorn.config import Config
-    from hypercorn.asyncio import serve
+        from hypercorn.config import Config
+        from hypercorn.asyncio import serve
 
-    config = Config()
-    config.bind = [f"0.0.0.0:{port}"]
-    config.use_reloader = True
+        config = Config()
+        config.bind = [f"0.0.0.0:{port}"]
+        config.use_reloader = False
 
-    print(f"✅ Hypercorn server listening at http://localhost:{port}")
+        print(f"✅ Hypercorn server (with Quart) listening at http://localhost:{port}")
 
-    asyncio.run(serve(server.app, config))
+        await serve(server.app, config)
+
+    asyncio.run(run_server())
 
 
 if __name__ == "__main__":
-    main()  # Just call the regular main function
+    main()

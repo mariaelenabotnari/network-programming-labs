@@ -9,13 +9,35 @@
       background: #f2f2f2;
       display: flex;
       flex-direction: column;
-      align-items: center;
+      align: center;
       margin-top: 40px;
+    }
+    h1 {
+      text-align: center;
+    }
+    #info-container {
+      text-align: center;
+      margin: 10px;
+      color: #555;
+    }
+    #status {
+      text-align: center;
+      min-height: 1.2em;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+    .status-ok {
+      color: #28a745;
+    }
+    .status-error {
+      color: #dc3545;
     }
     #board {
       display: grid;
       gap: 8px;
       margin-top: 20px;
+      margin-left: auto;
+      margin-right: auto;
     }
     .card {
       width: 60px;
@@ -29,89 +51,125 @@
       background: white;
       border: 2px solid #ddd;
       box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-      transition: background 0.2s;
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+    .card.queued {
+      background: #ffc; /* Light yellow */
     }
     .card:hover {
       background: #e9e9e9;
-    }
-    #info {
-      margin-top: 10px;
-      color: #555;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     }
   </style>
 </head>
 <body>
   <h1>🃏 Memory Game</h1>
-  <div id="info">Loading board...</div>
+  <div id="info-container">
+    <div id="info">Loading...</div>
+    <div id="status"></div>
+  </div>
   <div id="board"></div>
 
-  <script>
+<script>
     const SERVER = window.location.origin;
     const playerId = "player_" + Math.floor(Math.random() * 10000);
     document.getElementById("info").textContent = "You are " + playerId;
 
+    const statusDiv = document.getElementById("status");
+
     async function loadBoard() {
-      const res = await fetch(`${SERVER}/look/${playerId}`);
-      const text = await res.text();
-      renderBoard(text);
+      try {
+        const res = await fetch(`${SERVER}/look/${playerId}`);
+        if (!res.ok) throw new Error("Server not responding");
+        const text = await res.text();
+        renderBoard(text);
+      } catch (err) {
+        console.error("!!! LOADBOARD FAILED:", err);
+        statusDiv.textContent = "Error loading board. Is the server running?";
+        statusDiv.className = "status-error";
+      }
     }
 
     function renderBoard(text) {
       const boardDiv = document.getElementById("board");
       boardDiv.innerHTML = "";
       const rows = text.trim().split("\n");
+      if (rows.length === 0 || rows[0] === "") {
+        console.warn("RenderBoard: Received empty board text.");
+        return;
+      }
       const cols = rows[0].split(" ").length;
       boardDiv.style.gridTemplateColumns = `repeat(${cols}, 60px)`;
 
       rows.forEach((row, rIndex) => {
         const cells = row.split(" ");
-        cells.forEach((cell, cIndex) => {
+        cells.forEach((cellData, cIndex) => {
           const cardDiv = document.createElement("div");
           cardDiv.className = "card";
-          cardDiv.textContent = cell;
+
+          const parts = cellData.split(":");
+          const cellValue = parts[0];
+          const cellState = parts[1] || "default";
+
+          cardDiv.textContent = cellValue;
+
+          if (cellState === "queued") {
+            cardDiv.classList.add("queued");
+          }
+
           cardDiv.addEventListener("click", () => flipCard(rIndex, cIndex));
           boardDiv.appendChild(cardDiv);
         });
       });
     }
 
-async function flipCard(row, col) {
-    try {
-      const res = await fetch(`${SERVER}/flip/${playerId}/${row},${col}`);
+    async function flipCard(row, col) {
+      try {
+        const res = await fetch(`${SERVER}/flip/${playerId}/${row},${col}`);
+        const responseText = await res.text();
 
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error("Flip failed:", res.status, errorText);
-        return;
+        if (res.ok) {
+          renderBoard(responseText);
+          statusDiv.textContent = "";
+        } else {
+          // Server sent an error message
+          console.error("Flip failed:", res.status, responseText);
+          statusDiv.textContent = responseText;
+          statusDiv.className = "status-error";
+
+          await loadBoard();
+        }
+      } catch (err) {
+        console.error("Network error during flip:", err);
+        statusDiv.textContent = "Network error. Could not make move.";
+        statusDiv.className = "status-error";
+
+        await loadBoard();
       }
-
-      const newBoardState = await res.text();
-      renderBoard(newBoardState);
-
-    } catch (err) {
-      console.error("Network error during flip:", err);
     }
-  }
 
     async function watchBoard() {
-      try {
-        const res = await fetch(`${SERVER}/watch/${playerId}`);
-        const text = await res.text();
-        renderBoard(text);
-        await watchBoard();
-      } catch (err) {
-        console.log("Watch connection lost, retrying in 2s...");
-        setTimeout(watchBoard, 2000);
+      while (true) {
+        try {
+          const res = await fetch(`${SERVER}/watch/${playerId}`);
+          if (!res.ok) throw new Error("Watch connection failed");
+
+          const text = await res.text();
+          renderBoard(text);
+
+        } catch (err) {
+          console.log("Watch connection lost, retrying in 2s...");
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
       }
     }
 
-  async function start() {
-    await loadBoard();
-    await watchBoard();
-  }
+    async function start() {
+      await loadBoard();
+      await watchBoard();
+    }
 
-  start();
-
+    start();
   </script>
 </body>
 </html>

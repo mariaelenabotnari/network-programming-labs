@@ -1,4 +1,5 @@
 import asyncio
+from collections import deque
 from typing import List, Optional
 
 
@@ -10,6 +11,8 @@ class Card:
         self.face_up = face_up
         self.removed = removed
         self.player_id = player_id
+        self.controller: Optional[str] = None
+        self.matched: bool = False
 
     def __str__(self):
         if self.removed:
@@ -30,19 +33,19 @@ class Board:
         self.nr_cols = 0
         self.nr_rows = 0
         self.cards = []
-        self.watchers: list[asyncio.Future] = []
+        self.change_event = asyncio.Event()
+        self.board_lock = asyncio.Lock()
+        self.waiting_players_queue = {}
 
     def notify_watchers(self):
-        for watcher in self.watchers:
-            if not watcher.done():
-                watcher.set_result(True)
-        self.watchers.clear()
+        print(f"📢 Notifying watchers")
+        self.change_event.set()  # Just set the event
 
     async def wait_for_change(self):
-        loop = asyncio.get_event_loop()
-        future = loop.create_future()
-        self.watchers.append(future)
-        await future
+        # 1. Wait until the event is set (by notify_watchers)
+        await self.change_event.wait()
+        # 2. Clear the event, so we can wait for the next change
+        self.change_event.clear()
 
     def get_card(self, row: int, col: int):
         return self.cards[row][col]
@@ -53,6 +56,18 @@ class Board:
             row_string = " ".join(str(self.cards[r][c]) for c in range(self.nr_cols))
             board_rows.append(row_string)
         return "\n".join(board_rows)
+
+    def initialize_player_state(self, player_id: str):
+        if player_id not in self.player_state:
+            self.player_state[player_id] = {
+                "cards_this_round": [],
+                "cards_last_turn": [],
+                "last_turn_matched": False
+            }
+
+    def initialize_queue_for_card(self, row, column):
+        if (row, column) not in self.waiting_players_queue:
+            self.waiting_players_queue[(row, column)] = deque()
 
     @staticmethod
     async def parse_from_file(filename: str):
