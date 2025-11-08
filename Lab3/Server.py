@@ -1,11 +1,12 @@
 import os
 import sys
 import asyncio
+import httpx
 from quart import Quart, Response, send_from_directory
 from http import HTTPStatus
 
 from Lab3.Board import Board
-from Lab3.Commands import flip, look, map_card_value, watch
+from Lab3.Commands import flip, look, map_card_value, watch, apply_map_command
 
 
 class WebServer:
@@ -44,6 +45,7 @@ class WebServer:
 
         @self.app.get("/map/<value>")
         async def map_route(value):
+            """This route ACTS AS the async transformer function 'f'."""
             try:
                 mapped_value = await map_card_value(value)
                 return Response(mapped_value, status=HTTPStatus.OK, mimetype="text/plain")
@@ -53,6 +55,30 @@ class WebServer:
                     status=HTTPStatus.INTERNAL_SERVER_ERROR,
                     mimetype="text/plain",
                 )
+
+        @self.app.get("/apply_map")
+        async def apply_map_route():
+            """
+            This endpoint triggers the map operation.
+            It defines the async transformer function 'f'
+            which calls our own /map/<value> endpoint.
+            """
+            try:
+                async with httpx.AsyncClient() as client:
+
+                    async def transformer_func(value_to_map: str) -> str:
+                        url = f"http://127.0.0.1:{self.port}/map/{value_to_map}"
+                        res = await client.get(url)
+                        res.raise_for_status()
+                        return res.text
+
+                    await apply_map_command(self.board, transformer_func)
+
+                return Response("Map applied successfully", status=HTTPStatus.OK)
+
+            except Exception as e:
+                print(f"Error during /apply_map: {e}")
+                return Response(f"Failed to apply map: {e}", status=HTTPStatus.INTERNAL_SERVER_ERROR)
 
         @self.app.get("/watch/<player_id>")
         async def watch_route(player_id):
