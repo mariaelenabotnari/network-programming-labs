@@ -1,24 +1,22 @@
-import time
-
-from Lab3.Board import Board
-import asyncio
+from Lab3.CommandsImpl import Commands
 
 
-async def flip(player_id: str, row: int, col: int, board: Board):
-    return await board.flip(player_id, row, col)
+async def flip(commands: Commands, player_id: str, row: int, col: int) -> str:
+    return await commands.flip(player_id, row, col)
 
 
-async def look(board: Board, player_id: str):
-    return await board.look(player_id)
+async def look(commands: Commands, player_id: str) -> str:
+    return await commands.look(player_id)
 
 
-async def map_card_value(board: Board, value):
-    await board.map_card_value(value)
+async def watch(commands: Commands, player_id: str) -> str:
+    await commands.wait_for_change()
+    return await commands.look(player_id)
 
 
-async def apply_map_command(board: Board, transformer_function):
-    await board.apply_map(transformer_function)
+async def reset_board(commands: Commands,) -> None:
+    await commands.reset_board()
 
 
-async def watch(board: Board, player_id: str):
-    return await board.watch(player_id)
+async def apply_replace_command(commands: Commands, old_value: str, new_value: str) -> None:
+    await commands.replace_card_value(old_value, new_value)

@@ -1,39 +1,44 @@
 import os
 import sys
 import asyncio
-import httpx
-from quart import Quart, Response, send_from_directory
+from quart import Quart, Response, send_from_directory, request
 from http import HTTPStatus
 
 from Lab3.Board import Board
-from Lab3.Commands import flip, look, map_card_value, watch, apply_map_command
+from Lab3.CommandsImpl import Commands
+from Lab3.Commands import (
+    flip, look, watch,
+    apply_replace_command, reset_board
+)
 
 
 class WebServer:
-    def __init__(self, board: Board, port: int):
-        self.board = board
+    def __init__(self, port: int, commands: Commands):
         self.port = port
+        self.commands = commands
 
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
         PUBLIC_DIR = os.path.join(BASE_DIR, "public")
         self.app = Quart(__name__, static_folder="public", static_url_path="")
 
         @self.app.after_request
-        async def add_cors_headers(response):  # <-- Make this async
+        async def add_cors_headers(response):
             response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type"
             return response
 
         @self.app.get("/look/<player_id>")
         async def look_route(player_id):
-            board_state = await look(self.board, player_id)
+            board_state = await look(self.commands, player_id)
             return Response(board_state, status=HTTPStatus.OK, mimetype="text/plain")
 
         @self.app.get("/flip/<player_id>/<location>")
         async def flip_route(player_id, location):
             try:
                 row, column = map(int, location.split(","))
-                play_message = await flip(player_id, row, column, self.board)
-                board_state = await look(self.board, player_id)
+                play_message = await flip(self.commands, player_id, row, column)
+                board_state = await look(self.commands, player_id)
                 print(f"[{player_id}] Move result: {play_message}")
                 return Response(board_state, status=HTTPStatus.OK, mimetype="text/plain")
             except Exception as e:
@@ -43,51 +48,49 @@ class WebServer:
                     mimetype="text/plain",
                 )
 
-        @self.app.get("/map/<value>")
-        async def map_route(value):
-            """This route ACTS AS the async transformer function 'f'."""
+        @self.app.post("/replace")
+        async def replace_route():
             try:
-                mapped_value = await map_card_value(value)
-                return Response(mapped_value, status=HTTPStatus.OK, mimetype="text/plain")
-            except Exception as e:
+                data = await request.get_json()
+                if not data:
+                    raise ValueError("Missing JSON request body")
+
+                old_value = data.get("old")
+                new_value = data.get("new")
+
+                if not old_value or not new_value:
+                    raise ValueError("Request must include 'old' and 'new' keys.")
+
+                await apply_replace_command(self.commands, old_value, new_value)
+
+                return Response("Replacement successful", status=HTTPStatus.OK, mimetype="text/plain")
+
+            except (ValueError, Exception) as e:
+                print(f"Error during /replace: {e}")
                 return Response(
-                    f"error mapping value: {e}",
-                    status=HTTPStatus.INTERNAL_SERVER_ERROR,
+                    f"Failed to replace: {e}",
+                    status=HTTPStatus.BAD_REQUEST,
                     mimetype="text/plain",
                 )
 
-        @self.app.get("/apply_map")
-        async def apply_map_route():
-            """
-            This endpoint triggers the map operation.
-            It defines the async transformer function 'f'
-            which calls our own /map/<value> endpoint.
-            """
-            try:
-                async with httpx.AsyncClient() as client:
-
-                    async def transformer_func(value_to_map: str) -> str:
-                        url = f"http://127.0.0.1:{self.port}/map/{value_to_map}"
-                        res = await client.get(url)
-                        res.raise_for_status()
-                        return res.text
-
-                    await apply_map_command(self.board, transformer_func)
-
-                return Response("Map applied successfully", status=HTTPStatus.OK)
-
-            except Exception as e:
-                print(f"Error during /apply_map: {e}")
-                return Response(f"Failed to apply map: {e}", status=HTTPStatus.INTERNAL_SERVER_ERROR)
-
         @self.app.get("/watch/<player_id>")
         async def watch_route(player_id):
-            board_state = await watch(self.board, player_id)
+            # Use self.commands
+            board_state = await watch(self.commands, player_id)
             return Response(board_state, status=HTTPStatus.OK, mimetype="text/plain")
 
         @self.app.route("/")
         async def serve_index():
             return await send_from_directory(PUBLIC_DIR, "index.html")
+
+        @self.app.route("/reset", methods=["POST"])
+        async def handle_reset():
+            try:
+                await reset_board(self.commands)
+                return "Board reset successfully.", HTTPStatus.OK
+            except Exception as e:
+                print(f"Error during reset: {e}")
+                return str(e), HTTPStatus.INTERNAL_SERVER_ERROR
 
 
 def main():
@@ -100,8 +103,8 @@ def main():
 
     async def run_server():
         board = await Board.parse_from_file(filename)
-
-        server = WebServer(board, port)
+        commands = Commands(board)
+        server = WebServer(port, commands)
 
         from hypercorn.config import Config
         from hypercorn.asyncio import serve
