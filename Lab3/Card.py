@@ -3,38 +3,40 @@ from typing import Optional
 
 class Card:
     def __init__(self, string_value: str, face_down: bool = True,
-                 face_up: bool = False, removed: bool = False, player_id: Optional[str] = None) -> None:
+                 face_up: bool = False, removed: bool = False) -> None:
         self._string_value = string_value
         self._face_down = face_down
         self._face_up = face_up
         self._removed = removed
-        self._player_id = player_id
         self._controller: Optional[str] = None
         self._matched: bool = False
 
+        self.checkRep()
+
     def checkRep(self) -> None:
-        assert self._string_value is not None and len(self._string_value) > 0, \
-            "Card string_value must be non-empty"
+        """
+        REQUIRES:
+            - None
+
+        MODIFIES:
+            - None
+
+        EFFECTS:
+            - Ensures:
+                * not (face_up and face_down)
+                * if removed:
+                    - face_up is False
+                    - controller is None
+
+        THROWS:
+            - AssertionError if representation violated
+        """
+        assert not (self._face_up and self._face_down), \
+            "Card cannot be face_up and face_down at the same time."
 
         if self._removed:
-            assert not self._face_up, "Removed card cannot be face up"
-            assert not self._face_down, "Removed card cannot be face down"
-            assert self._controller is None, "Removed card cannot be controlled"
-            assert not self._matched, "Removed card cannot be matched"
-        elif self._face_up:
-            assert not self._face_down, "Card cannot be both face up and face down"
-        elif self._face_down:
-            assert not self._face_up, "Card cannot be both face up and face down"
-            assert self._controller is None, "Face down card cannot be controlled"
-        else:
-            assert False, "Card is in an invalid state (not up, down, or removed)"
-
-        if self._controller is not None:
-            assert self._face_up, "Controlled card must be face up"
-
-        if self._matched:
-            assert self._face_up, "Matched card must be face up"
-            assert not self._removed, "Matched card cannot be already removed"
+            assert not self._face_up, "Removed cards must not be face_up."
+            assert self._controller is None, "Removed cards cannot be controlled."
 
     @property
     def string_value(self) -> str:

@@ -75,7 +75,6 @@ class WebServer:
 
         @self.app.get("/watch/<player_id>")
         async def watch_route(player_id):
-            # Use self.commands
             board_state = await watch(self.commands, player_id)
             return Response(board_state, status=HTTPStatus.OK, mimetype="text/plain")
 

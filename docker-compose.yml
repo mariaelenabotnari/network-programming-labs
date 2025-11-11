@@ -1,26 +1,9 @@
-version: "3.8"
-
 services:
-  single_threaded_server:
-    build:
-      context: .
-      dockerfile: Dockerfile.server
-    container_name: file_server_single
-    ports:
-      - "8081:8081"
-    volumes:
-      - ./books:/data:ro
-    environment:
-      - SERVE_DIR=/data
-
-  multithreaded_server:
-    build:
-      context: .
-      dockerfile: Dockerfile.server_multithreaded
-    container_name: file_server_multi
+  app:
+    build: .
+    container_name: memoryscramble
     ports:
       - "8080:8080"
     volumes:
-      - ./books:/data:ro
-    environment:
-      - SERVE_DIR=/data
+      - .:/app
+    command: python Lab3/Server.py 8080 Lab3/Board.txt
