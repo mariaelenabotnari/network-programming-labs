@@ -114,6 +114,6 @@ watch tests confirm that waiting for board changes works correctly and unblocks 
 ![Docker build output](../images_lab3/19.png)
 
 # Simulation result
-In the simulation, all 4 players make 100 moves on the board concurrently. The server didn't crash.
+In the simulation, all 4 players make 100 moves on the board concurrently. The server didn't crash.   
 
 ![Docker build output](../images_lab3/20.png)

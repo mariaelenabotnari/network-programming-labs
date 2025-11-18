@@ -18,5 +18,6 @@ async def reset_board(commands: Commands,) -> None:
     await commands.reset_board()
 
 
+# MAP FUNCTION
 async def apply_replace_command(commands: Commands, old_value: str, new_value: str) -> None:
     await commands.replace_card_value(old_value, new_value)

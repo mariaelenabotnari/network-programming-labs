@@ -7,7 +7,7 @@ class Commands:
     def __init__(self, board: Board):
         self.board = board
 
-    def _to_tuple(self, row: int, col: int) -> tuple[int, int]:
+    def to_tuple(self, row: int, col: int) -> tuple[int, int]:
         return (row, col)
 
     def notify_watchers(self) -> None:
@@ -17,7 +17,7 @@ class Commands:
         await self.board.change_event.wait()
         self.board.change_event.clear()
 
-    def _player_is_waiting(self, player_id: str) -> bool:
+    def player_is_waiting(self, player_id: str) -> bool:
         """
         REQUIRES:
             - player_id is a valid player identifier (string).
@@ -44,7 +44,7 @@ class Commands:
                 return True
         return False
 
-    def _transfer_responsibility_to_current_controller(self, row: int, column: int, new_owner_id: str) -> None:
+    def transfer_responsibility_to_current_controller(self, row: int, column: int, new_owner_id: str) -> None:
         """
         REQUIRES:
             - (row, col) is a valid board position.
@@ -61,7 +61,7 @@ class Commands:
         THROWS:
             - None
         """
-        position = self._to_tuple(row, column)
+        position = self.to_tuple(row, column)
         for other_id, other_state in self.board.player_state.items():
             if other_id == new_owner_id:
                 continue
@@ -69,7 +69,7 @@ class Commands:
                 other_state["cards_last_turn"] = [p for p in other_state["cards_last_turn"] if p != position]
                 print(f"[{new_owner_id}] Taking responsibility for {position} from {other_id}")
 
-    def _record_last_turn_cards(self, player_id: str, a: tuple[int, int], b: Optional[tuple[int, int]], matched: bool) -> None:
+    def record_last_turn_cards(self, player_id: str, a: tuple[int, int], b: Optional[tuple[int, int]], matched: bool) -> None:
         """
         REQUIRES:
             - player_id is in board.player_state
@@ -196,10 +196,10 @@ class Commands:
 
             card.controller = next_player_id
 
-            self._transfer_responsibility_to_current_controller(row, col, next_player_id)
+            self.transfer_responsibility_to_current_controller(row, col, next_player_id)
 
             next_state["cards_this_round"].clear()
-            next_state["cards_this_round"].append(self._to_tuple(row, col))
+            next_state["cards_this_round"].append(self.to_tuple(row, col))
 
             print(f"[{next_player_id}] gained control of ({row},{col}) from queue.")
             self.notify_watchers()
@@ -245,7 +245,7 @@ class Commands:
         """
         async with self.board.board_lock:
             try:
-                if self._player_is_waiting(player_id):
+                if self.player_is_waiting(player_id):
                     raise Exception(
                         "You are in a queue and must wait your turn before flipping another card."
                     )
@@ -257,7 +257,7 @@ class Commands:
                 current_cards = state["cards_this_round"]
                 card = self.board.get_card(row, col)
                 queue_players = self.board.waiting_players_queue[(row, col)]
-                position = self._to_tuple(row, col)
+                position = self.to_tuple(row, col)
 
                 # ======== FIRST CARD ========
                 if len(current_cards) == 0:
@@ -294,7 +294,7 @@ class Commands:
                         print(f"[{player_id}] Took control of face-up card.")
 
                     # transfer responsibility for this card to current player
-                    self._transfer_responsibility_to_current_controller(row, col, player_id)
+                    self.transfer_responsibility_to_current_controller(row, col, player_id)
 
                     current_cards.append(position)
                     self.notify_watchers()
@@ -307,7 +307,7 @@ class Commands:
                         # selecting same card twice is an immediate fail
                         print(f"[{player_id}] Failed by selecting same card twice.")
                         await self.release_control_and_update_queue(first_pos[0], first_pos[1])
-                        self._record_last_turn_cards(player_id, first_pos, None, matched=False)
+                        self.record_last_turn_cards(player_id, first_pos, None, matched=False)
                         current_cards.clear()
                         raise Exception("Cannot select the same card twice.")
 
@@ -316,7 +316,7 @@ class Commands:
                     # 2-A: second card gone
                     if card.removed:
                         await self.release_control_and_update_queue(first_pos[0], first_pos[1])
-                        self._record_last_turn_cards(player_id, first_pos, None, matched=False)
+                        self.record_last_turn_cards(player_id, first_pos, None, matched=False)
                         current_cards.clear()
                         self.notify_watchers()
                         raise Exception("Second card is not on the board. Lost control of first card.")
@@ -324,7 +324,7 @@ class Commands:
                     # 2-B: second card controlled by anyone
                     if card.controller is not None:
                         await self.release_control_and_update_queue(first_pos[0], first_pos[1])
-                        self._record_last_turn_cards(player_id, first_pos, None, matched=False)
+                        self.record_last_turn_cards(player_id, first_pos, None, matched=False)
                         current_cards.clear()
                         self.notify_watchers()
                         raise Exception("Second card is controlled. Lost control of first card.")
@@ -342,14 +342,14 @@ class Commands:
                         print(f"[{player_id}] Took control of second face-up card.")
 
                     # transfer responsibility for the second card as well
-                    self._transfer_responsibility_to_current_controller(row, col, player_id)
+                    self.transfer_responsibility_to_current_controller(row, col, player_id)
 
                     if first_card.string_value == card.string_value:
                         # 2-D match: keep control now; 3-A will remove at next first-card attempt
                         print(f"[{player_id}] Match found!")
                         first_card.matched = True
                         card.matched = True
-                        self._record_last_turn_cards(player_id, first_pos, position, matched=True)
+                        self.record_last_turn_cards(player_id, first_pos, position, matched=True)
                         current_cards.clear()
                         self.notify_watchers()
                         return "A match was found! User controls both cards."
@@ -358,7 +358,7 @@ class Commands:
                         print(f"[{player_id}] No match.")
                         await self.release_control_and_update_queue(first_pos[0], first_pos[1])
                         await self.release_control_and_update_queue(row, col)
-                        self._record_last_turn_cards(player_id, first_pos, position, matched=False)
+                        self.record_last_turn_cards(player_id, first_pos, position, matched=False)
                         current_cards.clear()
                         self.notify_watchers()
                         print(f"First and second card controller: {first_card.controller} {card.controller}")
